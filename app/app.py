@@ -291,4 +291,5 @@ if __name__ == "__main__":
     if not model_is_trained():
         print("\n⚠️  AVISO: model/predictions.json não encontrado.")
         print("   Execute primeiro: cd ../model && python model.py\n")
-    app.run(debug=True, port=5050)
+    port = int(os.environ.get("PORT", 5050))
+    app.run(debug=False, host="0.0.0.0", port=port)
