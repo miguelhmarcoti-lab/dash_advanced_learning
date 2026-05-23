@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}War Risk Monitor{% endblock %}</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
+
+  <!-- Plotly -->
+  <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+
+  <style>
+    :root {
+      --bg:        #080d18;
+      --bg2:       #0d1526;
+      --bg3:       #111d35;
+      --border:    #1e2f50;
+      --amber:     #f0a500;
+      --amber-dim: #7a5200;
+      --red:       #e03030;
+      --red-dim:   #5a1010;
+      --green:     #22c55e;
+      --blue:      #3b82f6;
+      --text:      #c8d8f0;
+      --text-dim:  #5a7090;
+      --mono:      'Share Tech Mono', monospace;
+      --head:      'Rajdhani', sans-serif;
+      --body:      'Inter', sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--body);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Scanline overlay ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,.08) 2px,
+        rgba(0,0,0,.08) 4px
+      );
+      pointer-events: none;
+      z-index: 9999;
+    }
+
+    /* ── NAVBAR ── */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 2rem;
+      height: 60px;
+      gap: 0;
+    }
+
+    .nav-brand {
+      font-family: var(--head);
+      font-size: 1.2rem;
+      font-weight: 700;
+      letter-spacing: .15em;
+      color: var(--amber);
+      text-transform: uppercase;
+      margin-right: 3rem;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+    }
+    .nav-brand span.dot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--red);
+      animation: blink 1.4s infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+
+    .nav-links { display: flex; gap: 0; }
+    .nav-links a {
+      color: var(--text-dim);
+      text-decoration: none;
+      font-family: var(--mono);
+      font-size: .78rem;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      padding: 0 1.2rem;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      border-bottom: 2px solid transparent;
+      transition: color .2s, border-color .2s;
+    }
+    .nav-links a:hover { color: var(--text); }
+    .nav-links a.active {
+      color: var(--amber);
+      border-bottom-color: var(--amber);
+    }
+
+    .nav-status {
+      margin-left: auto;
+      font-family: var(--mono);
+      font-size: .72rem;
+      color: var(--text-dim);
+      letter-spacing: .08em;
+    }
+    .nav-status .dot-ok { color: var(--green); }
+    .nav-status .dot-warn { color: var(--amber); }
+
+    /* ── PAGE WRAPPER ── */
+    .page {
+      padding: 2rem;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    /* ── SECTION HEADER ── */
+    .section-header {
+      margin-bottom: 1.5rem;
+    }
+    .section-label {
+      font-family: var(--mono);
+      font-size: .72rem;
+      letter-spacing: .18em;
+      color: var(--amber);
+      text-transform: uppercase;
+      margin-bottom: .4rem;
+    }
+    .section-title {
+      font-family: var(--head);
+      font-size: 1.9rem;
+      font-weight: 700;
+      color: #e8f0ff;
+      letter-spacing: .04em;
+    }
+
+    /* ── CARD ── */
+    .card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1.5rem;
+      position: relative;
+      overflow: hidden;
+    }
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      width: 3px; height: 100%;
+      background: var(--amber);
+    }
+    .card.red::before  { background: var(--red); }
+    .card.blue::before { background: var(--blue); }
+    .card.green::before{ background: var(--green); }
+
+    .card-title {
+      font-family: var(--head);
+      font-size: 1rem;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--amber);
+      margin-bottom: 1rem;
+    }
+    .card.red   .card-title { color: var(--red); }
+    .card.blue  .card-title { color: var(--blue); }
+    .card.green .card-title { color: var(--green); }
+
+    /* ── GRID ── */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 1.2rem; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4,1fr); gap: 1.2rem; }
+
+    /* ── STAT BOX ── */
+    .stat { text-align: center; padding: .8rem; }
+    .stat-value {
+      font-family: var(--mono);
+      font-size: 1.9rem;
+      color: var(--amber);
+      display: block;
+    }
+    .stat.red .stat-value { color: var(--red); }
+    .stat.green .stat-value { color: var(--green); }
+    .stat.blue .stat-value { color: var(--blue); }
+    .stat-label {
+      font-size: .72rem;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-top: .3rem;
+    }
+
+    /* ── TABLE ── */
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .88rem;
+    }
+    .data-table th {
+      font-family: var(--mono);
+      font-size: .72rem;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      padding: .75rem 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    .data-table td {
+      padding: .7rem 1rem;
+      border-bottom: 1px solid rgba(30,47,80,.5);
+      font-family: var(--body);
+      color: var(--text);
+    }
+    .data-table tr:hover td { background: rgba(240,165,0,.04); }
+
+    /* ── BADGE ── */
+    .badge {
+      display: inline-block;
+      padding: .2rem .65rem;
+      border-radius: 2px;
+      font-family: var(--mono);
+      font-size: .72rem;
+      letter-spacing: .06em;
+    }
+    .badge-red    { background: var(--red-dim);  color: var(--red); }
+    .badge-amber  { background: var(--amber-dim);color: var(--amber); }
+    .badge-green  { background: rgba(34,197,94,.1); color: var(--green); }
+    .badge-blue   { background: rgba(59,130,246,.1); color: var(--blue); }
+
+    /* ── PROGRESS BAR ── */
+    .prob-bar-wrap {
+      display: flex;
+      align-items: center;
+      gap: .8rem;
+    }
+    .prob-bar {
+      flex: 1;
+      height: 6px;
+      background: var(--bg3);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .prob-bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      background: linear-gradient(90deg, var(--amber-dim), var(--amber));
+      transition: width .3s;
+    }
+    .prob-val {
+      font-family: var(--mono);
+      font-size: .82rem;
+      min-width: 46px;
+      text-align: right;
+      color: var(--amber);
+    }
+
+    /* ── WARNING BANNER ── */
+    .warning-banner {
+      background: rgba(240,165,0,.08);
+      border: 1px solid var(--amber-dim);
+      border-radius: 4px;
+      padding: 1rem 1.5rem;
+      font-family: var(--mono);
+      font-size: .82rem;
+      color: var(--amber);
+      margin-bottom: 1.5rem;
+    }
+
+    /* ── CODE BLOCK ── */
+    .code-block {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      font-family: var(--mono);
+      font-size: .82rem;
+      color: #8ab4f8;
+      overflow-x: auto;
+      white-space: pre;
+      line-height: 1.6;
+    }
+
+    /* ── PLOTLY OVERRIDES ── */
+    .js-plotly-plot .plotly { border-radius: 4px; }
+
+    /* ── MISC ── */
+    .spacer { height: 1.5rem; }
+    .text-dim { color: var(--text-dim); }
+    .text-mono { font-family: var(--mono); }
+    .mb1 { margin-bottom: 1rem; }
+    .mb15 { margin-bottom: 1.5rem; }
+  </style>
+
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+
+<nav>
+  <div class="nav-brand">
+    <span class="dot"></span>
+    WAR RISK MONITOR
+  </div>
+  <div class="nav-links">
+    <a href="/map"        class="{{ 'active' if active=='map' }}">[ MAP ]</a>
+    <a href="/table"      class="{{ 'active' if active=='table' }}">[ COUNTRIES ]</a>
+    <a href="/model"      class="{{ 'active' if active=='model' }}">[ MODEL ]</a>
+    <a href="/evaluation" class="{{ 'active' if active=='evaluation' }}">[ EVALUATION ]</a>
+  </div>
+  <div class="nav-status">
+    {% if trained %}
+      <span class="dot-ok">●</span> MODEL ACTIVE
+    {% else %}
+      <span class="dot-warn">●</span> MODEL NOT TRAINED
+    {% endif %}
+  </div>
+</nav>
+
+{% if not trained %}
+<div style="background:var(--bg2);border-bottom:1px solid var(--border);padding:.6rem 2rem;">
+  <div class="warning-banner" style="margin:0">
+    ⚠ Modelo não treinado. Execute: <strong>cd model && python model.py</strong>
+  </div>
+</div>
+{% endif %}
+
+<div class="page">
+  {% block content %}{% endblock %}
+</div>
+
+</body>
+</html>

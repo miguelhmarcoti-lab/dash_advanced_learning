@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}World Map — War Risk Monitor{% endblock %}
+
+{% block content %}
+<div class="section-header">
+  <div class="section-label">// geospatial analysis</div>
+  <div class="section-title">Global Conflict Risk Map</div>
+  <p class="text-dim mb15" style="margin-top:.5rem;font-size:.9rem">
+    Predicted probability of armed conflict in the next year, per country.
+    Data: UCDP / World Bank / Polity. Model: Neural Network.
+  </p>
+  <p class="text-dim mb20" style="font-size:.82rem;color:var(--amber);">
+    O modelo só consegue prever para países que têm todas as features disponíveis.
+    Alguns países podem aparecer sem dados ou em cinza quando faltam variáveis.
+  </p>
+</div>
+
+<!-- Top-risk badges -->
+<div id="top-risk-bar" style="display:flex;gap:.6rem;flex-wrap:wrap;margin-bottom:1.5rem;"></div>
+
+<!-- Map -->
+<div class="card" style="padding:1rem">
+  <div id="choropleth" style="width:100%;height:600px;"></div>
+</div>
+
+<div class="spacer"></div>
+
+<!-- Legend -->
+<div class="card" style="padding:1rem 1.5rem">
+  <div class="card-title">Risk Scale</div>
+  <div style="display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:.5rem">
+      <div style="width:120px;height:12px;border-radius:3px;background:linear-gradient(90deg,#003366,#f0a500,#e03030)"></div>
+      <span class="text-mono" style="font-size:.78rem">Low → Medium → High</span>
+    </div>
+    <div class="badge badge-green">0–15% LOW</div>
+    <div class="badge badge-amber">15–40% MEDIUM</div>
+    <div class="badge badge-red">40–100% HIGH</div>
+    <span class="text-dim" style="font-size:.78rem;margin-left:auto">
+      Grey = no data available
+    </span>
+  </div>
+</div>
+
+<script>
+const mapData = {{ map_data_json | safe }};
+
+// ── Build top-risk badges ──────────────────────────────────────────────────
+const sorted = [...mapData].sort((a,b) => b.prob - a.prob).slice(0, 8);
+const bar = document.getElementById('top-risk-bar');
+sorted.forEach(c => {
+  const pct = c.pct;
+  const cls = pct >= 40 ? 'badge-red' : pct >= 15 ? 'badge-amber' : 'badge-green';
+  const el = document.createElement('span');
+  el.className = `badge ${cls}`;
+  el.textContent = `${c.name}  ${pct}%`;
+  bar.appendChild(el);
+});
+
+// ── Plotly Choropleth ─────────────────────────────────────────────────────
+const iso3s  = mapData.map(d => d.iso3);
+const names  = mapData.map(d => d.name);
+const probs  = mapData.map(d => d.prob);
+const pcts   = mapData.map(d => d.pct);
+const texts  = mapData.map(d => `<b>${d.name}</b><br>Risk: ${d.pct}%`);
+
+const trace = {
+  type: 'choropleth',
+  locationmode: 'ISO-3',
+  locations: iso3s,
+  z: probs,
+  text: texts,
+  hovertemplate: '%{text}<extra></extra>',
+  colorscale: [
+    [0,    '#003d6b'],
+    [0.15, '#0d5c8a'],
+    [0.30, '#7a5200'],
+    [0.50, '#c07800'],
+    [0.65, '#f0a500'],
+    [0.80, '#c84000'],
+    [1,    '#e03030'],
+  ],
+  zmin: 0,
+  zmax: 1,
+  marker: {
+    line: { color: '#1e2f50', width: 0.4 }
+  },
+  colorbar: {
+    title: { text: 'Probability', font: { color: '#5a7090', family: 'Share Tech Mono', size: 11 } },
+    tickfont: { color: '#5a7090', family: 'Share Tech Mono', size: 10 },
+    bgcolor: 'rgba(0,0,0,0)',
+    bordercolor: '#1e2f50',
+    tickformat: '.0%',
+    len: 0.7,
+  },
+};
+
+const layout = {
+  paper_bgcolor: 'rgba(0,0,0,0)',
+  plot_bgcolor:  'rgba(0,0,0,0)',
+  geo: {
+    showframe: false,
+    showcoastlines: true,
+    coastlinecolor: '#1e2f50',
+    showland: true,
+    landcolor: '#0d1526',
+    showocean: true,
+    oceancolor: '#080d18',
+    showlakes: false,
+    showborders: true,
+    bordercolor: '#1e2f50',
+    borderwidth: 0.3,
+    projection: { type: 'natural earth' },
+    bgcolor: 'rgba(0,0,0,0)',
+  },
+  margin: { l:0, r:0, t:0, b:0 },
+  hoverlabel: {
+    bgcolor: '#111d35',
+    bordercolor: '#f0a500',
+    font: { color: '#c8d8f0', family: 'Rajdhani', size: 14 },
+  },
+};
+
+const config = {
+  responsive: true,
+  displaylogo: false,
+  modeBarButtonsToRemove: ['select2d','lasso2d','toImage'],
+};
+
+Plotly.newPlot('choropleth', [trace], layout, config);
+</script>
+{% endblock %}
