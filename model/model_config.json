@@ -1,0 +1,39 @@
+{
+    "layers": [
+        {
+            "units": 128,
+            "activation": "relu",
+            "dropout": 0.3
+        },
+        {
+            "units": 2,
+            "activation": "relu",
+            "dropout": null
+        }
+    ],
+    "output_activation": "sigmoid",
+    "optimizer": "adam",
+    "loss": "binary_crossentropy",
+    "epochs": 100,
+    "batch_size": 32,
+    "validation_split": 0.2,
+    "early_stopping_patience": 10,
+    "reduce_lr_patience": 5,
+    "reduce_lr_factor": 0.2,
+    "min_lr": 1e-05,
+    "cutoff_year": 2010,
+    "feature_names": [
+        "conflict",
+        "democracy_polity",
+        "gdp_per_capita",
+        "military_exp_pct_gdp",
+        "trade_pct_gdp",
+        "is_democracy",
+        "conflict_lag1",
+        "conflict_5y_sum"
+    ],
+    "input_dim": 8,
+    "training_samples": 6120,
+    "test_samples": 1080,
+    "framework": "TensorFlow/Keras"
+}
