@@ -3,11 +3,10 @@
 
 {% block content %}
 <div class="section-header">
-  <div class="section-label">// model comparison</div>
+  <div class="section-label">// comparação de modelos</div>
   <div class="section-title">Model Evaluation</div>
   <p class="text-dim mb15" style="margin-top:.5rem;font-size:.9rem">
-    Comparação entre os modelos baseline (Regressão Logística, Árvore, Random Forest, Gradient Boosting)
-    e a Rede Neural atual. Conforme novos modelos forem adicionados ao pipeline, aparecerão aqui automaticamente.
+    Comparação entre modelos baseline e Rede Neural para cada variante.
     Divisão temporal: treino ≤ 2010 / teste > 2010.
   </p>
 </div>
@@ -18,15 +17,27 @@
 </div>
 {% endif %}
 
+<!-- Variant selector + prediction year -->
+<div class="variant-selector">
+  <span class="variant-selector-label">Variante:</span>
+  <button class="variant-btn active" data-variant="base"          onclick="setVariant('base',this)">Modelo Base</button>
+  <button class="variant-btn"        data-variant="sem_lag1"      onclick="setVariant('sem_lag1',this)">Sem Conflito Anterior</button>
+  <button class="variant-btn"        data-variant="sem_historico" onclick="setVariant('sem_historico',this)">Conflitos Novos</button>
+  {% if prediction_year %}
+  <span class="pred-year-tag">◈ PREVENDO {{ prediction_year }}</span>
+  {% endif %}
+</div>
+
+<!-- Variant description -->
+<p id="variant-desc" class="text-dim mb15" style="font-size:.82rem;color:var(--amber);min-height:1.2em"></p>
+
 <!-- ── Leaderboard ── -->
 <div class="card mb15">
   <div class="card-title">Leaderboard (ordenado por AUC-ROC)</div>
   <table class="data-table">
     <thead>
       <tr>
-        <th>#</th>
-        <th>Modelo</th>
-        <th>Tipo</th>
+        <th>#</th><th>Modelo</th><th>Tipo</th>
         <th style="text-align:center">Accuracy</th>
         <th style="text-align:center">Precision</th>
         <th style="text-align:center">Recall ★</th>
@@ -34,43 +45,10 @@
         <th style="text-align:center">AUC-ROC</th>
       </tr>
     </thead>
-    <tbody>
-      {% set ns = namespace(rank=0) %}
-      {% for name, m in all_results.items() | sort(attribute='1.auc_roc', reverse=True) %}
-      {% set ns.rank = ns.rank + 1 %}
-      <tr>
-        <td class="text-mono" style="color:var(--text-dim)">{{ ns.rank }}</td>
-        <td>
-          <div style="font-family:var(--head);font-size:1rem;font-weight:600">{{ name }}</div>
-          <div style="font-size:.72rem;color:var(--text-dim);font-family:var(--mono)">
-            {{ m.split or 'temporal split' }}
-          </div>
-        </td>
-        <td>
-          {% if m.type == 'neural_network' %}
-            <span class="badge badge-amber">Neural Network</span>
-          {% else %}
-            <span class="badge badge-blue">Baseline ML</span>
-          {% endif %}
-        </td>
-        {% for metric in ['accuracy','precision','recall','f1','auc_roc'] %}
-        {% set val = m[metric] %}
-        <td style="text-align:center">
-          <span class="text-mono" style="
-            font-size:.9rem;
-            {% if metric == 'auc_roc' and val >= 0.75 %}color:var(--green)
-            {% elif metric == 'recall' and val >= 0.6 %}color:var(--green)
-            {% elif val >= 0.7 %}color:var(--text)
-            {% else %}color:var(--text-dim){% endif %}
-          ">{{ "%.4f"|format(val) if val else '—' }}</span>
-        </td>
-        {% endfor %}
-      </tr>
-      {% else %}
+    <tbody id="leaderboard-body">
       <tr><td colspan="8" class="text-dim" style="text-align:center;padding:2rem">
-        Nenhum resultado disponível. Execute model.py primeiro.
+        Carregando...
       </td></tr>
-      {% endfor %}
     </tbody>
   </table>
   <p style="font-size:.75rem;color:var(--text-dim);margin-top:1rem;font-family:var(--mono)">
@@ -84,19 +62,19 @@
   <div id="bar-chart" style="height:380px"></div>
 </div>
 
-<!-- ── Radar Chart ── -->
+<!-- ── Radar Charts ── -->
 <div class="grid-2 mb15">
   <div class="card" style="padding:1rem">
-    <div class="card-title">Radar — Modelos Baseline</div>
+    <div class="card-title">Radar — Modelos Clássicos</div>
     <div id="radar-baseline" style="height:360px"></div>
   </div>
   <div class="card" style="padding:1rem">
-    <div class="card-title">Radar — Baseline vs Rede Neural</div>
+    <div class="card-title">Radar — Todos os Modelos</div>
     <div id="radar-all" style="height:360px"></div>
   </div>
 </div>
 
-<!-- ── Metric Explanations ── -->
+<!-- ── Metric Guide ── -->
 <div class="card">
   <div class="card-title">Guia de Métricas</div>
   <div class="grid-2" style="gap:1.5rem">
@@ -104,26 +82,11 @@
       <table class="data-table" style="font-size:.82rem">
         <thead><tr><th>Métrica</th><th>Significado</th></tr></thead>
         <tbody>
-          <tr>
-            <td class="text-mono">Accuracy</td>
-            <td>Acertos totais / total de previsões</td>
-          </tr>
-          <tr>
-            <td class="text-mono">Precision</td>
-            <td>Verdadeiros conflitos / total que o modelo disse "conflito"</td>
-          </tr>
-          <tr>
-            <td class="text-mono" style="color:var(--green)">Recall ★</td>
-            <td>Verdadeiros conflitos / total de conflitos reais na base</td>
-          </tr>
-          <tr>
-            <td class="text-mono">F1-Score</td>
-            <td>2 × (Precision × Recall) / (Precision + Recall)</td>
-          </tr>
-          <tr>
-            <td class="text-mono">AUC-ROC</td>
-            <td>Capacidade de rankear corretamente países em risco (0.5 = aleatório, 1.0 = perfeito)</td>
-          </tr>
+          <tr><td class="text-mono">Accuracy</td><td>Acertos totais / total de previsões</td></tr>
+          <tr><td class="text-mono">Precision</td><td>Verdadeiros conflitos / total que o modelo disse "conflito"</td></tr>
+          <tr><td class="text-mono" style="color:var(--green)">Recall ★</td><td>Verdadeiros conflitos / total de conflitos reais na base</td></tr>
+          <tr><td class="text-mono">F1-Score</td><td>2 × (Precision × Recall) / (Precision + Recall)</td></tr>
+          <tr><td class="text-mono">AUC-ROC</td><td>Capacidade de rankear corretamente países em risco (0.5 = aleatório, 1.0 = perfeito)</td></tr>
         </tbody>
       </table>
     </div>
@@ -144,83 +107,148 @@ Por quê não aleatório?
 </div>
 
 <script>
-const chartData = {{ chart_data_json | safe }};
-
-const COLORS = {
-  baseline: '#3b82f6',
-  neural_network: '#f0a500',
+const CHART_DATA_BY_VARIANT = {{ chart_data_by_variant_json | safe }};
+const VARIANT_DESCS = {
+  base:          'Inclui conflict_lag1 e conflict_5y_sum — captura continuação de conflitos.',
+  sem_lag1:      'Remove conflict_lag1; mantém conflict_5y_sum — reduz viés de continuidade imediata.',
+  sem_historico: 'Remove todo o histórico de conflito — prevê novos conflitos via fatores estruturais.',
 };
-const METRICS = ['accuracy','precision','recall','f1','auc_roc'];
+
+const METRICS       = ['accuracy','precision','recall','f1','auc_roc'];
 const METRIC_LABELS = ['Accuracy','Precision','Recall','F1','AUC-ROC'];
 
-const cfg = {
-  responsive: true,
-  displaylogo: false,
-  modeBarButtonsToRemove: ['select2d','lasso2d'],
-};
-
+const plotCfg = { responsive:true, displaylogo:false, modeBarButtonsToRemove:['select2d','lasso2d'] };
 const baseLayout = {
-  paper_bgcolor: 'rgba(0,0,0,0)',
-  plot_bgcolor:  'rgba(0,0,0,0)',
-  font: { color: '#5a7090', family: 'Share Tech Mono', size: 10 },
-  legend: { bgcolor:'rgba(0,0,0,0)', font:{size:10} },
-  hoverlabel: {
-    bgcolor:'#111d35', bordercolor:'#1e2f50',
-    font: { color:'#c8d8f0', family:'Share Tech Mono', size:11 }
-  },
+  paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)',
+  font:{ color:'#5a7090', family:'Share Tech Mono', size:10 },
+  legend:{ bgcolor:'rgba(0,0,0,0)', font:{size:10} },
+  hoverlabel:{ bgcolor:'#111d35', bordercolor:'#1e2f50', font:{color:'#c8d8f0',family:'Share Tech Mono',size:11} },
 };
 
-// ── Grouped Bar ──────────────────────────────────────────────────────────────
-const barTraces = chartData.map(d => ({
-  type: 'bar',
-  name: d.name,
-  x: METRIC_LABELS,
-  y: METRICS.map(m => d[m]),
-  marker: {
-    color: d.type === 'neural_network' ? '#f0a500' : '#3b82f6',
-    opacity: d.type === 'neural_network' ? 1 : 0.7,
-    line: { width: d.type === 'neural_network' ? 1 : 0, color: '#f0a500' }
-  },
-  hovertemplate: '%{x}: <b>%{y:.4f}</b><extra>' + d.name + '</extra>',
-}));
+let activeVariant = 'base';
+let chartsInitialized = false;
 
-Plotly.newPlot('bar-chart', barTraces, {
-  ...baseLayout,
-  barmode: 'group',
-  xaxis: { gridcolor:'#1e2f50', tickfont:{size:10} },
-  yaxis: { range:[0,1.05], gridcolor:'#1e2f50', tickfont:{size:10} },
-  margin: { l:40, r:10, t:10, b:40 },
-}, cfg);
-
-// ── Radar charts ──────────────────────────────────────────────────────────────
-function makeRadar(divId, subset) {
-  const traces = subset.map(d => ({
-    type: 'scatterpolar',
-    name: d.name,
-    r: [...METRICS.map(m => d[m]), d[METRICS[0]]],
-    theta: [...METRIC_LABELS, METRIC_LABELS[0]],
-    fill: 'toself',
-    fillcolor: (d.type === 'neural_network' ? 'rgba(240,165,0,.15)' : 'rgba(59,130,246,.1)'),
-    line: { color: d.type === 'neural_network' ? '#f0a500' : '#3b82f6', width: 2 },
-    hovertemplate: '%{theta}: <b>%{r:.4f}</b><extra>' + d.name + '</extra>',
-  }));
-
-  Plotly.newPlot(divId, traces, {
-    ...baseLayout,
-    polar: {
-      bgcolor: 'rgba(0,0,0,0)',
-      gridshape: 'linear',
-      angularaxis: { tickfont:{size:9,color:'#5a7090'}, linecolor:'#1e2f50', gridcolor:'#1e2f50' },
-      radialaxis: { range:[0,1], tickfont:{size:8,color:'#5a7090'}, gridcolor:'#1e2f50', linecolor:'#1e2f50', tickformat:'.1f' },
-    },
-    margin: { l:40, r:40, t:30, b:40 },
-  }, cfg);
+// ── Variant switch ────────────────────────────────────────────────────────────
+function setVariant(v, btn) {
+  activeVariant = v;
+  document.querySelectorAll('.variant-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('variant-desc').textContent = VARIANT_DESCS[v] || '';
+  renderLeaderboard();
+  renderCharts();
 }
 
-const baselineOnly = chartData.filter(d => d.type === 'baseline');
-const allModels    = chartData;
+// ── Leaderboard ───────────────────────────────────────────────────────────────
+function renderLeaderboard() {
+  const data  = CHART_DATA_BY_VARIANT[activeVariant] || [];
+  const tbody = document.getElementById('leaderboard-body');
+  tbody.innerHTML = '';
 
-makeRadar('radar-baseline', baselineOnly.length ? baselineOnly : chartData);
-makeRadar('radar-all', allModels);
+  if (!data.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="text-dim" style="text-align:center;padding:2rem">Nenhum resultado. Execute model.py primeiro.</td></tr>';
+    return;
+  }
+
+  data.forEach((d, i) => {
+    const isNN = d.type === 'neural_network';
+    const badge = isNN
+      ? '<span class="badge badge-amber">Neural Network</span>'
+      : '<span class="badge badge-blue">Baseline ML</span>';
+
+    const cells = METRICS.map(m => {
+      const val = d[m] || 0;
+      let color = 'var(--text-dim)';
+      if (m === 'auc_roc' && val >= 0.75) color = 'var(--green)';
+      else if (m === 'recall' && val >= 0.6) color = 'var(--green)';
+      else if (val >= 0.7) color = 'var(--text)';
+      return `<td style="text-align:center"><span class="text-mono" style="font-size:.9rem;color:${color}">${val.toFixed(4)}</span></td>`;
+    }).join('');
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="text-mono" style="color:var(--text-dim)">${i+1}</td>
+      <td>
+        <div style="font-family:var(--head);font-size:1rem;font-weight:600">${d.name}</div>
+        <div style="font-size:.72rem;color:var(--text-dim);font-family:var(--mono)">${d.split || 'temporal split'}</div>
+      </td>
+      <td>${badge}</td>
+      ${cells}
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+// ── Charts ────────────────────────────────────────────────────────────────────
+function renderCharts() {
+  const data = CHART_DATA_BY_VARIANT[activeVariant] || [];
+
+  // Grouped bar
+  const barTraces = data.map(d => ({
+    type: 'bar', name: d.name,
+    x: METRIC_LABELS,
+    y: METRICS.map(m => d[m]),
+    marker: {
+      color: d.type === 'neural_network' ? '#f0a500' : '#3b82f6',
+      opacity: d.type === 'neural_network' ? 1 : 0.7,
+      line: { width: d.type === 'neural_network' ? 1 : 0, color: '#f0a500' }
+    },
+    hovertemplate: '%{x}: <b>%{y:.4f}</b><extra>' + d.name + '</extra>',
+  }));
+
+  const barLayout = {
+    ...baseLayout,
+    barmode: 'group',
+    xaxis: { gridcolor:'#1e2f50', tickfont:{size:10} },
+    yaxis: { range:[0,1.05], gridcolor:'#1e2f50', tickfont:{size:10} },
+    margin: { l:40, r:10, t:10, b:40 },
+  };
+
+  if (!chartsInitialized) {
+    Plotly.newPlot('bar-chart', barTraces, barLayout, plotCfg);
+  } else {
+    Plotly.react('bar-chart', barTraces, barLayout, plotCfg);
+  }
+
+  // Radar
+  const radarLayout = (id) => ({
+    ...baseLayout,
+    polar: {
+      bgcolor: 'rgba(0,0,0,0)', gridshape: 'linear',
+      angularaxis: { tickfont:{size:9,color:'#5a7090'}, linecolor:'#1e2f50', gridcolor:'#1e2f50' },
+      radialaxis:  { range:[0,1], tickfont:{size:8,color:'#5a7090'}, gridcolor:'#1e2f50', linecolor:'#1e2f50', tickformat:'.1f' },
+    },
+    margin: { l:40, r:40, t:30, b:40 },
+  });
+
+  function makeRadarTraces(subset) {
+    return subset.map(d => ({
+      type: 'scatterpolar', name: d.name,
+      r:     [...METRICS.map(m => d[m]), d[METRICS[0]]],
+      theta: [...METRIC_LABELS, METRIC_LABELS[0]],
+      fill: 'toself',
+      fillcolor: d.type === 'neural_network' ? 'rgba(240,165,0,.15)' : 'rgba(59,130,246,.1)',
+      line: { color: d.type === 'neural_network' ? '#f0a500' : '#3b82f6', width:2 },
+      hovertemplate: '%{theta}: <b>%{r:.4f}</b><extra>' + d.name + '</extra>',
+    }));
+  }
+
+  const classicalOnly = data.filter(d => d.type !== 'neural_network');
+  const baselineTraces = makeRadarTraces(classicalOnly.length ? classicalOnly : data);
+  const allTraces      = makeRadarTraces(data);
+
+  if (!chartsInitialized) {
+    Plotly.newPlot('radar-baseline', baselineTraces, radarLayout('radar-baseline'), plotCfg);
+    Plotly.newPlot('radar-all',      allTraces,      radarLayout('radar-all'),      plotCfg);
+    chartsInitialized = true;
+  } else {
+    Plotly.react('radar-baseline', baselineTraces, radarLayout('radar-baseline'), plotCfg);
+    Plotly.react('radar-all',      allTraces,      radarLayout('radar-all'),      plotCfg);
+  }
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+document.getElementById('variant-desc').textContent = VARIANT_DESCS['base'];
+renderLeaderboard();
+renderCharts();
 </script>
 {% endblock %}

@@ -1,0 +1,128 @@
+{
+    "base": {
+        "LogisticRegression": {
+            "democracy_polity": 0.356016,
+            "military_exp_pct_gdp": 0.071962,
+            "trade_pct_gdp": 0.208591,
+            "log_gdp_per_capita": 0.20743,
+            "is_democracy": 0.414238,
+            "conflict_lag1": 0.669615,
+            "conflict_5y_sum": 0.761172
+        },
+        "DecisionTreeClassifier": {
+            "democracy_polity": 0.042762,
+            "military_exp_pct_gdp": 0.006357,
+            "trade_pct_gdp": 0.011567,
+            "log_gdp_per_capita": 0.021077,
+            "is_democracy": 0.0,
+            "conflict_lag1": 0.261117,
+            "conflict_5y_sum": 0.080665
+        },
+        "RandomForestClassifier": {
+            "democracy_polity": 0.025053,
+            "military_exp_pct_gdp": 0.024271,
+            "trade_pct_gdp": 0.026704,
+            "log_gdp_per_capita": 0.029076,
+            "is_democracy": 0.012803,
+            "conflict_lag1": 0.184693,
+            "conflict_5y_sum": 0.137023
+        },
+        "GradientBoostingClassifier": {
+            "democracy_polity": 0.015637,
+            "military_exp_pct_gdp": 0.001275,
+            "trade_pct_gdp": 0.022971,
+            "log_gdp_per_capita": 0.045621,
+            "is_democracy": 0.0,
+            "conflict_lag1": 0.745269,
+            "conflict_5y_sum": 0.217314
+        },
+        "NeuralNetwork": {
+            "democracy_polity": 0.016059,
+            "military_exp_pct_gdp": 0.016996,
+            "trade_pct_gdp": 0.01255,
+            "log_gdp_per_capita": 0.02246,
+            "is_democracy": 0.029831,
+            "conflict_lag1": 0.132481,
+            "conflict_5y_sum": 0.107904
+        }
+    },
+    "sem_lag1": {
+        "LogisticRegression": {
+            "democracy_polity": 0.384099,
+            "military_exp_pct_gdp": 0.080558,
+            "trade_pct_gdp": 0.208935,
+            "log_gdp_per_capita": 0.213506,
+            "is_democracy": 0.436385,
+            "conflict_5y_sum": 1.311727
+        },
+        "DecisionTreeClassifier": {
+            "democracy_polity": 0.00652,
+            "military_exp_pct_gdp": 0.006683,
+            "trade_pct_gdp": 0.023478,
+            "log_gdp_per_capita": 0.037248,
+            "is_democracy": 0.0,
+            "conflict_5y_sum": 0.314414
+        },
+        "RandomForestClassifier": {
+            "democracy_polity": 0.030998,
+            "military_exp_pct_gdp": 0.042778,
+            "trade_pct_gdp": 0.031549,
+            "log_gdp_per_capita": 0.038076,
+            "is_democracy": 0.013495,
+            "conflict_5y_sum": 0.262789
+        },
+        "GradientBoostingClassifier": {
+            "democracy_polity": 0.014786,
+            "military_exp_pct_gdp": 0.005263,
+            "trade_pct_gdp": 0.028293,
+            "log_gdp_per_capita": 0.048309,
+            "is_democracy": 0.0,
+            "conflict_5y_sum": 0.866598
+        },
+        "NeuralNetwork": {
+            "democracy_polity": 0.024158,
+            "military_exp_pct_gdp": 0.028989,
+            "trade_pct_gdp": 0.017889,
+            "log_gdp_per_capita": 0.01933,
+            "is_democracy": 0.032316,
+            "conflict_5y_sum": 0.387608
+        }
+    },
+    "sem_historico": {
+        "LogisticRegression": {
+            "democracy_polity": 0.562746,
+            "military_exp_pct_gdp": 0.215846,
+            "trade_pct_gdp": 0.331554,
+            "log_gdp_per_capita": 0.44292,
+            "is_democracy": 0.411673
+        },
+        "DecisionTreeClassifier": {
+            "democracy_polity": 0.069941,
+            "military_exp_pct_gdp": 0.100308,
+            "trade_pct_gdp": 0.048495,
+            "log_gdp_per_capita": 0.118394,
+            "is_democracy": 0.0
+        },
+        "RandomForestClassifier": {
+            "democracy_polity": 0.060398,
+            "military_exp_pct_gdp": 0.098752,
+            "trade_pct_gdp": 0.06563,
+            "log_gdp_per_capita": 0.088439,
+            "is_democracy": 0.013144
+        },
+        "GradientBoostingClassifier": {
+            "democracy_polity": 0.112133,
+            "military_exp_pct_gdp": 0.218392,
+            "trade_pct_gdp": 0.104202,
+            "log_gdp_per_capita": 0.231129,
+            "is_democracy": 0.0
+        },
+        "NeuralNetwork": {
+            "democracy_polity": 0.089341,
+            "military_exp_pct_gdp": 0.067661,
+            "trade_pct_gdp": 0.066582,
+            "log_gdp_per_capita": 0.103566,
+            "is_democracy": 0.038572
+        }
+    }
+}

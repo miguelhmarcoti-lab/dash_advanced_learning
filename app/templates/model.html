@@ -3,11 +3,11 @@
 
 {% block content %}
 <div class="section-header">
-  <div class="section-label">// neural network architecture</div>
-  <div class="section-title">Conflict Prediction Model</div>
+  <div class="section-label">// arquitetura e explicabilidade</div>
+  <div class="section-title">Modelo de Previsão de Conflitos</div>
   <p class="text-dim mb15" style="margin-top:.5rem;font-size:.9rem">
-    Binary classification neural network — predicts P(armed conflict in next year).
-    Temporal split: train ≤ {{ config.cutoff_year or 2010 }}, test > {{ config.cutoff_year or 2010 }}.
+    Binary classification — predicts P(armed conflict in next year).
+    Divisão temporal: treino ≤ 2010, teste > 2010.
   </p>
 </div>
 
@@ -17,67 +17,62 @@
 </div>
 {% endif %}
 
-<!-- ── Performance KPIs ── -->
+<!-- Variant selector + prediction year -->
+<div class="variant-selector">
+  <span class="variant-selector-label">Variante:</span>
+  <button class="variant-btn active" data-variant="base"          onclick="setVariant('base',this)">Modelo Base</button>
+  <button class="variant-btn"        data-variant="sem_lag1"      onclick="setVariant('sem_lag1',this)">Sem Conflito Anterior</button>
+  <button class="variant-btn"        data-variant="sem_historico" onclick="setVariant('sem_historico',this)">Conflitos Novos</button>
+  {% if prediction_year %}
+  <span class="pred-year-tag">◈ PREVENDO {{ prediction_year }}</span>
+  {% endif %}
+</div>
+
+<!-- Variant description -->
+<p id="variant-desc" class="text-dim mb15" style="font-size:.82rem;color:var(--amber);min-height:1.4em"></p>
+
+<!-- ── Performance KPIs (NN) ── -->
+<div style="font-family:var(--mono);font-size:.72rem;color:var(--text-dim);letter-spacing:.1em;text-transform:uppercase;margin-bottom:.6rem">
+  Rede Neural — resultados no conjunto de teste
+</div>
 <div class="grid-4 mb15">
   <div class="card">
-    <div class="stat">
-      <span class="stat-value">{{ "%.3f"|format(nn_info.auc_roc) if nn_info.auc_roc else '—' }}</span>
-      <div class="stat-label">AUC-ROC</div>
-    </div>
+    <div class="stat"><span class="stat-value" id="kpi-auc">—</span><div class="stat-label">AUC-ROC</div></div>
   </div>
   <div class="card">
-    <div class="stat green">
-      <span class="stat-value" style="color:var(--green)">{{ "%.3f"|format(nn_info.recall) if nn_info.recall else '—' }}</span>
-      <div class="stat-label">Recall (priority)</div>
-    </div>
+    <div class="stat green"><span class="stat-value" style="color:var(--green)" id="kpi-recall">—</span><div class="stat-label">Recall (priority)</div></div>
   </div>
   <div class="card">
-    <div class="stat blue">
-      <span class="stat-value" style="color:var(--blue)">{{ "%.3f"|format(nn_info.f1) if nn_info.f1 else '—' }}</span>
-      <div class="stat-label">F1-Score</div>
-    </div>
+    <div class="stat blue"><span class="stat-value" style="color:var(--blue)" id="kpi-f1">—</span><div class="stat-label">F1-Score</div></div>
   </div>
   <div class="card">
-    <div class="stat">
-      <span class="stat-value">{{ "%.3f"|format(nn_info.accuracy) if nn_info.accuracy else '—' }}</span>
-      <div class="stat-label">Accuracy</div>
-    </div>
+    <div class="stat"><span class="stat-value" id="kpi-acc">—</span><div class="stat-label">Accuracy</div></div>
   </div>
 </div>
 
 <div class="grid-2 mb15">
-
   <!-- ── Architecture ── -->
   <div class="card">
     <div class="card-title">Architecture</div>
     <table class="data-table" style="font-size:.82rem">
-      <thead>
-        <tr>
-          <th>Layer</th>
-          <th>Type</th>
-          <th>Units / Rate</th>
-          <th>Activation</th>
-        </tr>
-      </thead>
+      <thead><tr><th>Camada</th><th>Tipo</th><th>Unidades / Taxa</th><th>Ativação</th></tr></thead>
       <tbody>
         <tr>
-          <td class="text-mono">Input</td>
-          <td class="text-mono">Dense</td>
-          <td class="text-mono">{{ config.input_dim or '—' }}</td>
+          <td class="text-mono">Entrada</td><td class="text-mono">Dense</td>
+          <td class="text-mono" id="arch-input-dim">{{ config.input_dim or '—' }}</td>
           <td><span class="badge badge-blue">relu</span></td>
         </tr>
-        {% if config.layers %}
-          {% for layer in config.layers %}
+        {% if config.layers or config.nn_architecture %}
+          {% set layers = config.nn_architecture or config.layers or [] %}
+          {% for layer in layers %}
           <tr>
-            <td class="text-mono">Hidden {{ loop.index }}</td>
-            <td class="text-mono">Dense</td>
+            <td class="text-mono">Oculta {{ loop.index }}</td><td class="text-mono">Dense</td>
             <td class="text-mono">{{ layer.units }}</td>
             <td><span class="badge badge-blue">{{ layer.activation }}</span></td>
           </tr>
           {% if layer.dropout %}
           <tr>
-            <td class="text-mono"></td>
-            <td class="text-mono">Dropout</td>
+            <td class="text-mono"></td><td class="text-mono">Dropout</td>
             <td class="text-mono">{{ layer.dropout }}</td>
             <td><span class="text-dim">—</span></td>
           </tr>
@@ -85,8 +80,7 @@
           {% endfor %}
         {% endif %}
         <tr>
-          <td class="text-mono">Output</td>
-          <td class="text-mono">Dense</td>
+          <td class="text-mono">Saída</td><td class="text-mono">Dense</td>
           <td class="text-mono">1</td>
           <td><span class="badge badge-amber">sigmoid</span></td>
         </tr>
@@ -100,43 +94,78 @@
     <table class="data-table" style="font-size:.82rem">
       <thead><tr><th>Parâmetro</th><th>Valor</th></tr></thead>
       <tbody>
-        <tr><td>Optimizer</td><td class="text-mono">{{ config.optimizer or 'adam' }}</td></tr>
-        <tr><td>Loss</td><td class="text-mono">{{ config.loss or 'binary_crossentropy' }}</td></tr>
-        <tr><td>Epochs (max)</td><td class="text-mono">{{ config.epochs or 100 }}</td></tr>
-        <tr><td>Batch Size</td><td class="text-mono">{{ config.batch_size or 32 }}</td></tr>
-        <tr><td>Validation Split</td><td class="text-mono">{{ config.validation_split or 0.2 }}</td></tr>
-        <tr><td>EarlyStopping patience</td><td class="text-mono">{{ config.early_stopping_patience or 10 }}</td></tr>
-        <tr><td>ReduceLR factor</td><td class="text-mono">{{ config.reduce_lr_factor or 0.2 }}</td></tr>
-        <tr><td>Min LR</td><td class="text-mono">{{ config.min_lr or '1e-5' }}</td></tr>
+        <tr><td>Optimizer</td><td class="text-mono">adam</td></tr>
+        <tr><td>Loss</td><td class="text-mono">binary_crossentropy</td></tr>
+        <tr><td>Epochs (max)</td><td class="text-mono">100 (EarlyStopping)</td></tr>
+        <tr><td>Batch Size</td><td class="text-mono">32</td></tr>
+        <tr><td>Validation Split</td><td class="text-mono">0.2</td></tr>
+        <tr><td>EarlyStopping patience</td><td class="text-mono">10</td></tr>
+        <tr><td>ReduceLR factor / patience</td><td class="text-mono">0.2 / 5</td></tr>
+        <tr><td>Min LR</td><td class="text-mono">1e-5</td></tr>
         <tr><td>Class Weight</td><td class="text-mono">balanced (inverse freq.)</td></tr>
-        <tr><td>Split Strategy</td><td class="text-mono">Temporal (year cutoff)</td></tr>
-        <tr><td>Train samples</td><td class="text-mono">{{ config.training_samples or '—' }}</td></tr>
-        <tr><td>Test samples</td><td class="text-mono">{{ config.test_samples or '—' }}</td></tr>
+        <tr><td>Split Strategy</td><td class="text-mono">Temporal (ano ≤ 2010)</td></tr>
       </tbody>
     </table>
   </div>
 </div>
 
-<!-- ── Feature Set ── -->
+<!-- ── Feature Sets ── -->
 <div class="card mb15">
   <div class="card-title">Features de Entrada</div>
-  <div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-bottom:1rem">
-    {% if config.feature_names %}
-      {% for feat in config.feature_names %}
-      <span class="badge badge-blue">{{ feat }}</span>
-      {% endfor %}
-    {% else %}
-      <span class="text-dim">Execute model.py para ver as features.</span>
-    {% endif %}
+
+  <!-- Tabs clássico vs NN -->
+  <div style="display:flex;gap:.4rem;margin-bottom:.9rem">
+    <button class="variant-btn active" id="feat-tab-classical" onclick="showFeatTab('classical',this)" style="font-size:.68rem">Modelos Clássicos</button>
+    <button class="variant-btn"        id="feat-tab-nn"        onclick="showFeatTab('nn',this)"        style="font-size:.68rem">Rede Neural</button>
   </div>
+
+  <div id="feature-badges-classical" style="display:flex;gap:.6rem;flex-wrap:wrap;margin-bottom:.8rem"></div>
+  <div id="feature-badges-nn"        style="display:none;gap:.6rem;flex-wrap:wrap;margin-bottom:.8rem"></div>
+
+  <div id="base-note" style="display:none">
+    <p style="font-size:.8rem;color:var(--amber);font-family:var(--mono);margin-bottom:.6rem">
+      ⚠ No Modelo Base, clássicos e NN usam feature sets diferentes:
+      clássicos não usam <code>conflict</code> (status atual); NN usa <code>conflict</code> como preditor — daí o recall maior.
+    </p>
+  </div>
+
   <p style="font-size:.82rem;color:var(--text-dim);line-height:1.7">
-    <strong style="color:var(--text)">conflict_lag1</strong> — conflito no ano anterior (lag 1) &nbsp;|&nbsp;
-    <strong style="color:var(--text)">conflict_5y_sum</strong> — soma de conflitos nos últimos 5 anos &nbsp;|&nbsp;
-    <strong style="color:var(--text)">democracy_polity</strong> — score Polity IV de democracia &nbsp;|&nbsp;
-    <strong style="color:var(--text)">gdp_per_capita</strong> — PIB per capita (USD 2015) &nbsp;|&nbsp;
+    <strong style="color:var(--text)">conflict</strong> — conflito no ano atual (apenas NN base) &nbsp;|&nbsp;
+    <strong style="color:var(--text)">conflict_lag1</strong> — conflito no ano anterior &nbsp;|&nbsp;
+    <strong style="color:var(--text)">conflict_5y_sum</strong> — conflitos nos últimos 5 anos &nbsp;|&nbsp;
+    <strong style="color:var(--text)">democracy_polity</strong> — score Polity IV &nbsp;|&nbsp;
+    <strong style="color:var(--text)">log_gdp_per_capita</strong> — log(PIB per capita) &nbsp;|&nbsp;
     <strong style="color:var(--text)">military_exp_pct_gdp</strong> — gastos militares % PIB &nbsp;|&nbsp;
-    <strong style="color:var(--text)">trade_pct_gdp</strong> — abertura comercial % PIB &nbsp;|&nbsp;
-    <strong style="color:var(--text)">is_democracy</strong> — binária (Polity ≥ 6)
+    <strong style="color:var(--text)">trade_pct_gdp</strong> — abertura comercial % PIB
+  </p>
+</div>
+
+<!-- ── SHAP Feature Importance ── -->
+<div class="card mb15">
+  <div class="card-title">SHAP Feature Importance</div>
+  <p style="font-size:.82rem;color:var(--text-dim);margin-bottom:1rem;line-height:1.6">
+    Clássicos: <strong style="color:var(--text)">TreeExplainer</strong> (árvores) /
+    <strong style="color:var(--text)">LinearExplainer</strong> (logística) —
+    Rede Neural: <strong style="color:var(--text)">DeepExplainer</strong> (gradientes esperados, Keras/TF).
+  </p>
+
+  <div style="display:flex;align-items:center;gap:.8rem;margin-bottom:1rem;flex-wrap:wrap">
+    <span style="font-family:var(--mono);font-size:.72rem;color:var(--text-dim)">Modelo:</span>
+    <select id="shap-model-select" class="mono-select" onchange="renderShap()">
+      <option value="RandomForestClassifier">Random Forest</option>
+      <option value="GradientBoostingClassifier">Gradient Boosting</option>
+      <option value="LogisticRegression">Logistic Regression</option>
+      <option value="DecisionTreeClassifier">Decision Tree</option>
+      <option value="NeuralNetwork">Rede Neural (DeepExplainer)</option>
+    </select>
+    <span id="shap-empty-msg" style="font-family:var(--mono);font-size:.78rem;color:var(--red);display:none">
+      Nenhum dado SHAP disponível — execute model.py para calcular.
+    </span>
+  </div>
+
+  <div id="shap-chart" style="height:300px"></div>
+  <p style="font-size:.78rem;color:var(--text-dim);margin-top:.8rem;font-family:var(--mono)">
+    Mean |SHAP| — importância média absoluta de cada feature. Valores maiores = maior influência na predição.
   </p>
 </div>
 
@@ -158,106 +187,222 @@
   <div class="grid-2" style="gap:1.5rem">
     <div>
       <p style="font-size:.85rem;line-height:1.8;color:var(--text)">
-        <strong style="color:var(--amber)">Por que Recall como métrica principal?</strong><br>
-        Conflitos não detectados (falsos negativos) são muito mais custosos que falsos alarmes.
-        Um país em risco ignorado tem consequências reais; um falso alerta é apenas uma análise extra.
+        <strong style="color:var(--amber)">Por que a NN base tem recall maior?</strong><br>
+        No Modelo Base, a NN tem acesso à feature <code>conflict</code> (status atual do país),
+        que os clássicos não têm. Isso é o preditor mais forte —
+        "país em guerra hoje → provavelmente em guerra amanhã."
+        Não é data leakage: estamos prevendo o <em>próximo</em> ano.
       </p>
       <br>
       <p style="font-size:.85rem;line-height:1.8;color:var(--text)">
-        <strong style="color:var(--amber)">Por que class_weight balanceado?</strong><br>
-        Apenas ~23% dos pares país-ano contêm conflito. Sem balanceamento, o modelo simplesmente
-        prevê "sem conflito" e obtém ~77% de accuracy sem aprender nada útil.
+        <strong style="color:var(--amber)">Por que 3 variantes?</strong><br>
+        <em>Base</em>: melhor desempenho — comparação com vantagem da NN.<br>
+        <em>Sem conflict_lag1</em>: reduz viés de continuidade.<br>
+        <em>Conflitos Novos</em>: comparação justa, apenas fatores estruturais.
       </p>
     </div>
     <div>
       <p style="font-size:.85rem;line-height:1.8;color:var(--text)">
-        <strong style="color:var(--amber)">Por que divisão temporal (não aleatória)?</strong><br>
-        Dados de painel têm autocorrelação temporal. Divisão aleatória cria data leakage —
-        o modelo "veria" o futuro no treino. Corte em 2010 é conservador e realista.
+        <strong style="color:var(--amber)">Por que DeepExplainer para a NN?</strong><br>
+        TreeExplainer e LinearExplainer só funcionam com seus respectivos tipos de modelo.
+        DeepExplainer usa gradientes esperados (semelhante a Integrated Gradients),
+        específico para redes com TensorFlow/Keras.
       </p>
       <br>
       <p style="font-size:.85rem;line-height:1.8;color:var(--text)">
-        <strong style="color:var(--amber)">Por que Isolation Forest foi removido?</strong><br>
-        Países em conflito são eventos raros — exatamente o que o modelo quer aprender.
-        O Isolation Forest interpretaria esses casos como "outliers" e os removeria,
-        destruindo a informação mais valiosa da base.
+        <strong style="color:var(--amber)">Por que divisão temporal?</strong><br>
+        Dados de painel têm autocorrelação temporal. Divisão aleatória cria data leakage —
+        o modelo "veria" o futuro no treino. Corte em 2010 simula uso real.
       </p>
     </div>
   </div>
 </div>
 
 <script>
-const history = {{ history_json | safe }};
-const epochs = history.loss ? history.loss.map((_,i) => i+1) : [];
+const ALL_CONFIGS  = {{ all_configs_json | safe }};
+const ALL_NN_INFO  = {{ all_nn_info_json | safe }};
+const ALL_SHAP     = {{ shap_data_json   | safe }};
 
-const plotConfig = {
-  responsive: true,
-  displaylogo: false,
-  modeBarButtonsToRemove: ['select2d','lasso2d'],
+const VARIANT_DESCS = {
+  base:          'Modelo original: clássicos sem "conflict" atual (usa log_gdp + lag1 + 5y_sum); NN mantém "conflict" — daí o recall mais alto.',
+  sem_lag1:      'Remove conflict_lag1 e conflict atual; mantém conflict_5y_sum. Features iguais entre clássicos e NN.',
+  sem_historico: 'Remove todo o histórico de conflito. Prevê via economia, democracia e gastos militares.',
 };
-const plotLayout = (title, yLabel) => ({
-  paper_bgcolor: 'rgba(0,0,0,0)',
-  plot_bgcolor:  'rgba(0,0,0,0)',
-  font: { color: '#5a7090', family: 'Share Tech Mono', size: 10 },
-  xaxis: {
-    title: { text: 'Epoch', font: { size: 10 } },
-    gridcolor: '#1e2f50', zerolinecolor: '#1e2f50',
-    tickfont: { size: 10 }
-  },
-  yaxis: {
-    title: { text: yLabel, font: { size: 10 } },
-    gridcolor: '#1e2f50', zerolinecolor: '#1e2f50',
-    tickfont: { size: 10 }
-  },
-  legend: { font: { size: 10 }, bgcolor: 'rgba(0,0,0,0)' },
-  margin: { l:50, r:10, t:10, b:40 },
-  hovermode: 'x unified',
-  hoverlabel: {
-    bgcolor: '#111d35', bordercolor: '#1e2f50',
-    font: { color: '#c8d8f0', family: 'Share Tech Mono', size: 11 }
-  },
-});
 
-// Loss chart
-if (history.loss && history.loss.length) {
-  Plotly.newPlot('loss-chart', [
-    {
-      x: epochs, y: history.loss, name: 'Train Loss',
-      mode: 'lines', line: { color: '#f0a500', width: 2 },
-    },
-    {
-      x: epochs, y: history.val_loss, name: 'Val Loss',
-      mode: 'lines', line: { color: '#e03030', width: 2, dash: 'dot' },
-    },
-  ], plotLayout('Loss', 'Binary Cross-Entropy'), plotConfig);
-} else {
-  document.getElementById('loss-chart').innerHTML =
-    '<p class="text-dim" style="padding:2rem;text-align:center">Execute model.py para gerar o histórico.</p>';
+let activeVariant = 'base';
+let activeFeatTab = 'classical';
+let histOk = false, shapOk = false;
+
+const plotCfg = { responsive:true, displaylogo:false, modeBarButtonsToRemove:['select2d','lasso2d'] };
+
+// ── Variant switch ─────────────────────────────────────────────────────────
+function setVariant(v, btn) {
+  activeVariant = v;
+  document.querySelectorAll('.variant-btn[data-variant]').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('variant-desc').textContent = VARIANT_DESCS[v] || '';
+  updateKpis();
+  updateFeatureBadges();
+  renderHistoryCharts();
+  renderShap();
 }
 
-// AUC / Recall chart
-if (history.auc && history.auc.length) {
-  Plotly.newPlot('auc-chart', [
-    {
-      x: epochs, y: history.auc, name: 'Train AUC',
-      mode: 'lines', line: { color: '#3b82f6', width: 2 },
-    },
-    {
-      x: epochs, y: history.val_auc, name: 'Val AUC',
-      mode: 'lines', line: { color: '#60a5fa', width: 2, dash: 'dot' },
-    },
-    {
-      x: epochs, y: history.recall, name: 'Train Recall',
-      mode: 'lines', line: { color: '#22c55e', width: 2 },
-    },
-    {
-      x: epochs, y: history.val_recall, name: 'Val Recall',
-      mode: 'lines', line: { color: '#86efac', width: 2, dash: 'dot' },
-    },
-  ], plotLayout('AUC / Recall', 'Score'), plotConfig);
-} else {
-  document.getElementById('auc-chart').innerHTML =
-    '<p class="text-dim" style="padding:2rem;text-align:center">Execute model.py para gerar o histórico.</p>';
+// ── Feature tab (classical / nn) ───────────────────────────────────────────
+function showFeatTab(tab, btn) {
+  activeFeatTab = tab;
+  document.getElementById('feat-tab-classical').classList.toggle('active', tab === 'classical');
+  document.getElementById('feat-tab-nn').classList.toggle('active', tab === 'nn');
+  document.getElementById('feature-badges-classical').style.display = tab === 'classical' ? 'flex' : 'none';
+  document.getElementById('feature-badges-nn').style.display        = tab === 'nn'        ? 'flex' : 'none';
 }
+
+// ── KPIs ───────────────────────────────────────────────────────────────────
+function fmt(v) { return v != null ? v.toFixed(3) : '—'; }
+
+function updateKpis() {
+  const info = ALL_NN_INFO[activeVariant] || {};
+  document.getElementById('kpi-auc').textContent    = fmt(info.auc_roc);
+  document.getElementById('kpi-recall').textContent = fmt(info.recall);
+  document.getElementById('kpi-f1').textContent     = fmt(info.f1);
+  document.getElementById('kpi-acc').textContent    = fmt(info.accuracy);
+  const cfg = ALL_CONFIGS[activeVariant] || {};
+  const dimEl = document.getElementById('arch-input-dim');
+  if (dimEl) dimEl.textContent = cfg.input_dim || '—';
+}
+
+// ── Feature badges ─────────────────────────────────────────────────────────
+function makeBadges(features) {
+  return (features || []).map(f => {
+    // Highlight features especiais
+    const isConflict = f === 'conflict';
+    const color = isConflict ? 'badge-red' : 'badge-blue';
+    return `<span class="badge ${color}" title="${isConflict ? 'Apenas NN base' : ''}">${f}</span>`;
+  }).join('');
+}
+
+function updateFeatureBadges() {
+  const cfg = ALL_CONFIGS[activeVariant] || {};
+  const fc  = cfg.features_classical || cfg.features || [];
+  const fn  = cfg.features_nn        || cfg.features || [];
+
+  document.getElementById('feature-badges-classical').innerHTML = makeBadges(fc);
+  document.getElementById('feature-badges-nn').innerHTML        = makeBadges(fn);
+
+  // Nota especial para o modelo base (feature sets diferentes)
+  const noteEl = document.getElementById('base-note');
+  const different = JSON.stringify(fc.slice().sort()) !== JSON.stringify(fn.slice().sort());
+  noteEl.style.display = different ? 'block' : 'none';
+}
+
+// ── SHAP chart ─────────────────────────────────────────────────────────────
+function renderShap() {
+  const modelKey   = document.getElementById('shap-model-select').value;
+  const varShap    = ALL_SHAP[activeVariant] || {};
+  const featureMap = varShap[modelKey] || {};
+  const emptyMsg   = document.getElementById('shap-empty-msg');
+
+  const entries = Object.entries(featureMap).sort((a, b) => b[1] - a[1]);
+
+  if (!entries.length) {
+    emptyMsg.style.display = 'inline';
+    if (shapOk) Plotly.purge('shap-chart');
+    document.getElementById('shap-chart').innerHTML =
+      '<p class="text-dim" style="padding:3rem;text-align:center;font-family:var(--mono);font-size:.82rem">Sem dados SHAP para esta combinação. Execute model.py.</p>';
+    shapOk = false;
+    return;
+  }
+  emptyMsg.style.display = 'none';
+
+  const features = entries.map(e => e[0]);
+  const values   = entries.map(e => e[1]);
+  const isNN     = modelKey === 'NeuralNetwork';
+
+  const barColor = isNN
+    ? values.map((_, i) => `rgba(240,${Math.round(100 + 65*(1-i/features.length))},0,0.85)`)
+    : values.map((_, i) => `rgba(59,${Math.round(100+30*(1-i/features.length))},246,0.85)`);
+
+  const trace = [{
+    type: 'bar', orientation: 'h',
+    x: values, y: features,
+    marker: { color: barColor },
+    hovertemplate: '<b>%{y}</b>: %{x:.6f}<extra></extra>',
+  }];
+
+  const layout = {
+    paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)',
+    xaxis: {
+      title:{ text:'Mean |SHAP value|', font:{size:10} },
+      gridcolor:'#1e2f50', tickfont:{color:'#5a7090',size:10}
+    },
+    yaxis: { gridcolor:'#1e2f50', tickfont:{color:'#c8d8f0',size:11}, automargin:true },
+    margin:{ l:10, r:20, t:10, b:50 },
+    font:{ color:'#5a7090', family:'Share Tech Mono', size:10 },
+    hoverlabel:{ bgcolor:'#111d35', bordercolor:'#1e2f50', font:{color:'#c8d8f0',size:11} },
+    annotations:[{
+      x:1, y:-0.18, xref:'paper', yref:'paper', showarrow:false,
+      text: isNN ? 'DeepExplainer (gradientes esperados)' : 'TreeExplainer / LinearExplainer',
+      font:{ size:9, color:'#5a7090', family:'Share Tech Mono' }, xanchor:'right',
+    }],
+  };
+
+  if (!shapOk) {
+    Plotly.newPlot('shap-chart', trace, layout, plotCfg);
+    shapOk = true;
+  } else {
+    Plotly.react('shap-chart', trace, layout, plotCfg);
+  }
+}
+
+// ── Training History ───────────────────────────────────────────────────────
+function renderHistoryCharts() {
+  const info    = ALL_NN_INFO[activeVariant] || {};
+  const history = info.history || {};
+  const epochs  = history.loss ? history.loss.map((_, i) => i + 1) : [];
+  const noData  = '<p class="text-dim" style="padding:2rem;text-align:center;font-family:var(--mono);font-size:.82rem">Execute model.py para gerar o histórico.</p>';
+
+  const hLayout = yLabel => ({
+    paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)',
+    font:{ color:'#5a7090', family:'Share Tech Mono', size:10 },
+    xaxis:{ title:{text:'Época',font:{size:10}}, gridcolor:'#1e2f50', tickfont:{size:10} },
+    yaxis:{ title:{text:yLabel,font:{size:10}},  gridcolor:'#1e2f50', tickfont:{size:10} },
+    legend:{ font:{size:10}, bgcolor:'rgba(0,0,0,0)' },
+    margin:{ l:50, r:10, t:10, b:40 }, hovermode:'x unified',
+    hoverlabel:{ bgcolor:'#111d35', bordercolor:'#1e2f50', font:{color:'#c8d8f0',family:'Share Tech Mono',size:11} },
+  });
+
+  if (!history.loss || !history.loss.length) {
+    document.getElementById('loss-chart').innerHTML = noData;
+    document.getElementById('auc-chart').innerHTML  = noData;
+    histOk = false;
+    return;
+  }
+
+  const lossT = [
+    { x:epochs, y:history.loss,     name:'Perda Treino', mode:'lines', line:{color:'#f0a500',width:2} },
+    { x:epochs, y:history.val_loss, name:'Perda Validação',   mode:'lines', line:{color:'#e03030',width:2,dash:'dot'} },
+  ];
+  const aucT = [
+    { x:epochs, y:history.auc,        name:'AUC Treino',    mode:'lines', line:{color:'#3b82f6',width:2} },
+    { x:epochs, y:history.val_auc,    name:'AUC Validação',      mode:'lines', line:{color:'#60a5fa',width:2,dash:'dot'} },
+    { x:epochs, y:history.recall,     name:'Recall Treino', mode:'lines', line:{color:'#22c55e',width:2} },
+    { x:epochs, y:history.val_recall, name:'Recall Validação',   mode:'lines', line:{color:'#86efac',width:2,dash:'dot'} },
+  ].filter(t => t.y && t.y.length);
+
+  if (!histOk) {
+    Plotly.newPlot('loss-chart', lossT, hLayout('Entropia Cruzada Binária'), plotCfg);
+    Plotly.newPlot('auc-chart',  aucT,  hLayout('Score'), plotCfg);
+    histOk = true;
+  } else {
+    Plotly.react('loss-chart', lossT, hLayout('Entropia Cruzada Binária'), plotCfg);
+    Plotly.react('auc-chart',  aucT,  hLayout('Score'), plotCfg);
+  }
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+document.getElementById('variant-desc').textContent = VARIANT_DESCS['base'];
+updateKpis();
+updateFeatureBadges();
+renderHistoryCharts();
+renderShap();
 </script>
 {% endblock %}

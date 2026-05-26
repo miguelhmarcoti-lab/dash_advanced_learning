@@ -3,17 +3,27 @@
 
 {% block content %}
 <div class="section-header">
-  <div class="section-label">// geospatial analysis</div>
-  <div class="section-title">Global Conflict Risk Map</div>
+  <div class="section-label">// análise geoespacial</div>
+  <div class="section-title">Mapa Global de Risco de Conflito</div>
   <p class="text-dim mb15" style="margin-top:.5rem;font-size:.9rem">
-    Predicted probability of armed conflict in the next year, per country.
-    Data: UCDP / World Bank / Polity. Model: Neural Network.
-  </p>
-  <p class="text-dim mb20" style="font-size:.82rem;color:var(--amber);">
-    O modelo só consegue prever para países que têm todas as features disponíveis.
-    Alguns países podem aparecer sem dados ou em cinza quando faltam variáveis.
+    Probabilidade prevista de conflito armado no próximo ano, por país.
+    Data: UCDP / World Bank / Polity.
   </p>
 </div>
+
+<!-- Variant selector + prediction year -->
+<div class="variant-selector">
+  <span class="variant-selector-label">Modelo:</span>
+  <button class="variant-btn active" data-variant="base"          onclick="setVariant('base',this)">Modelo Base</button>
+  <button class="variant-btn"        data-variant="sem_lag1"      onclick="setVariant('sem_lag1',this)">Sem Conflito Anterior</button>
+  <button class="variant-btn"        data-variant="sem_historico" onclick="setVariant('sem_historico',this)">Conflitos Novos</button>
+  {% if prediction_year %}
+  <span class="pred-year-tag">◈ PREVENDO {{ prediction_year }}</span>
+  {% endif %}
+</div>
+
+<!-- Variant description -->
+<p id="variant-desc" class="text-dim mb15" style="font-size:.82rem;color:var(--amber);min-height:1.2em"></p>
 
 <!-- Top-risk badges -->
 <div id="top-risk-bar" style="display:flex;gap:.6rem;flex-wrap:wrap;margin-bottom:1.5rem;"></div>
@@ -27,106 +37,108 @@
 
 <!-- Legend -->
 <div class="card" style="padding:1rem 1.5rem">
-  <div class="card-title">Risk Scale</div>
+  <div class="card-title">Escala de Risco</div>
   <div style="display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap">
     <div style="display:flex;align-items:center;gap:.5rem">
       <div style="width:120px;height:12px;border-radius:3px;background:linear-gradient(90deg,#003366,#f0a500,#e03030)"></div>
-      <span class="text-mono" style="font-size:.78rem">Low → Medium → High</span>
+      <span class="text-mono" style="font-size:.78rem">Baixo → Médio → Alto</span>
     </div>
-    <div class="badge badge-green">0–15% LOW</div>
-    <div class="badge badge-amber">15–40% MEDIUM</div>
-    <div class="badge badge-red">40–100% HIGH</div>
-    <span class="text-dim" style="font-size:.78rem;margin-left:auto">
-      Grey = no data available
-    </span>
+    <div class="badge badge-green">0–15% BAIXO</div>
+    <div class="badge badge-amber">15–40% MÉDIO</div>
+    <div class="badge badge-red">40–100% ALTO</div>
+    <span class="text-dim" style="font-size:.78rem;margin-left:auto">Cinza = sem dados disponíveis</span>
   </div>
 </div>
 
 <script>
-const mapData = {{ map_data_json | safe }};
+const ALL_VARIANTS_MAP = {{ all_variants_map_json | safe }};
+const PREDICTION_YEAR  = {{ prediction_year or 'null' }};
 
-// ── Build top-risk badges ──────────────────────────────────────────────────
-const sorted = [...mapData].sort((a,b) => b.prob - a.prob).slice(0, 8);
-const bar = document.getElementById('top-risk-bar');
-sorted.forEach(c => {
-  const pct = c.pct;
-  const cls = pct >= 40 ? 'badge-red' : pct >= 15 ? 'badge-amber' : 'badge-green';
-  const el = document.createElement('span');
-  el.className = `badge ${cls}`;
-  el.textContent = `${c.name}  ${pct}%`;
-  bar.appendChild(el);
-});
+const VARIANT_DESCS = {
+  base:          'Inclui conflict_lag1 e conflict_5y_sum — captura continuação de conflitos.',
+  sem_lag1:      'Remove conflict_lag1; mantém conflict_5y_sum — reduz viés de continuidade imediata.',
+  sem_historico: 'Remove todo o histórico de conflito — prevê novos conflitos via fatores estruturais.',
+};
 
-// ── Plotly Choropleth ─────────────────────────────────────────────────────
-const iso3s  = mapData.map(d => d.iso3);
-const names  = mapData.map(d => d.name);
-const probs  = mapData.map(d => d.prob);
-const pcts   = mapData.map(d => d.pct);
-const texts  = mapData.map(d => `<b>${d.name}</b><br>Risk: ${d.pct}%`);
+let activeVariant = 'base';
+
+function setVariant(v, btn) {
+  activeVariant = v;
+  document.querySelectorAll('.variant-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('variant-desc').textContent = VARIANT_DESCS[v] || '';
+  renderMap();
+}
+
+function renderMap() {
+  const data   = ALL_VARIANTS_MAP[activeVariant] || [];
+  const sorted = [...data].sort((a, b) => b.prob - a.prob).slice(0, 8);
+
+  // Top-risk badges
+  const bar = document.getElementById('top-risk-bar');
+  bar.innerHTML = '';
+  sorted.forEach(c => {
+    const cls = c.pct >= 40 ? 'badge-red' : c.pct >= 15 ? 'badge-amber' : 'badge-green';
+    const el = document.createElement('span');
+    el.className = `badge ${cls}`;
+    el.textContent = `${c.name}  ${c.pct}%`;
+    bar.appendChild(el);
+  });
+
+  // Update Plotly data
+  Plotly.restyle('choropleth', {
+    locations: [data.map(d => d.iso3)],
+    z:         [data.map(d => d.prob)],
+    text:      [data.map(d => `<b>${d.name}</b><br>Risco: ${d.pct}%`)],
+  });
+}
+
+// ── Initial Plotly render ────────────────────────────────────────────────────
+const initData = ALL_VARIANTS_MAP['base'] || [];
 
 const trace = {
   type: 'choropleth',
   locationmode: 'ISO-3',
-  locations: iso3s,
-  z: probs,
-  text: texts,
+  locations: initData.map(d => d.iso3),
+  z:         initData.map(d => d.prob),
+  text:      initData.map(d => `<b>${d.name}</b><br>Risco: ${d.pct}%`),
   hovertemplate: '%{text}<extra></extra>',
   colorscale: [
-    [0,    '#003d6b'],
-    [0.15, '#0d5c8a'],
-    [0.30, '#7a5200'],
-    [0.50, '#c07800'],
-    [0.65, '#f0a500'],
-    [0.80, '#c84000'],
-    [1,    '#e03030'],
+    [0,    '#003d6b'],[0.15,'#0d5c8a'],[0.30,'#7a5200'],
+    [0.50, '#c07800'],[0.65,'#f0a500'],[0.80,'#c84000'],[1,'#e03030'],
   ],
-  zmin: 0,
-  zmax: 1,
-  marker: {
-    line: { color: '#1e2f50', width: 0.4 }
-  },
+  zmin: 0, zmax: 1,
+  marker: { line: { color: '#1e2f50', width: 0.4 } },
   colorbar: {
-    title: { text: 'Probability', font: { color: '#5a7090', family: 'Share Tech Mono', size: 11 } },
+    title: { text: 'Probabilidade', font: { color: '#5a7090', family: 'Share Tech Mono', size: 11 } },
     tickfont: { color: '#5a7090', family: 'Share Tech Mono', size: 10 },
-    bgcolor: 'rgba(0,0,0,0)',
-    bordercolor: '#1e2f50',
-    tickformat: '.0%',
-    len: 0.7,
+    bgcolor: 'rgba(0,0,0,0)', bordercolor: '#1e2f50',
+    tickformat: '.0%', len: 0.7,
   },
 };
 
 const layout = {
-  paper_bgcolor: 'rgba(0,0,0,0)',
-  plot_bgcolor:  'rgba(0,0,0,0)',
+  paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
   geo: {
-    showframe: false,
-    showcoastlines: true,
-    coastlinecolor: '#1e2f50',
-    showland: true,
-    landcolor: '#0d1526',
-    showocean: true,
-    oceancolor: '#080d18',
-    showlakes: false,
-    showborders: true,
-    bordercolor: '#1e2f50',
-    borderwidth: 0.3,
-    projection: { type: 'natural earth' },
-    bgcolor: 'rgba(0,0,0,0)',
+    showframe: false, showcoastlines: true, coastlinecolor: '#1e2f50',
+    showland: true, landcolor: '#0d1526', showocean: true, oceancolor: '#080d18',
+    showlakes: false, showborders: true, bordercolor: '#1e2f50', borderwidth: 0.3,
+    projection: { type: 'natural earth' }, bgcolor: 'rgba(0,0,0,0)',
   },
   margin: { l:0, r:0, t:0, b:0 },
   hoverlabel: {
-    bgcolor: '#111d35',
-    bordercolor: '#f0a500',
+    bgcolor: '#111d35', bordercolor: '#f0a500',
     font: { color: '#c8d8f0', family: 'Rajdhani', size: 14 },
   },
 };
 
-const config = {
-  responsive: true,
-  displaylogo: false,
+Plotly.newPlot('choropleth', [trace], layout, {
+  responsive: true, displaylogo: false,
   modeBarButtonsToRemove: ['select2d','lasso2d','toImage'],
-};
-
-Plotly.newPlot('choropleth', [trace], layout, config);
+}).then(() => {
+  // Trigger initial top-risk bar
+  renderMap();
+  document.getElementById('variant-desc').textContent = VARIANT_DESCS['base'];
+});
 </script>
 {% endblock %}

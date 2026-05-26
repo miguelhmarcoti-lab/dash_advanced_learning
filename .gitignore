@@ -1,6 +1,3 @@
 data/panel_final.csv
-model/*.joblib
-model/*.keras
-model/*.json
 __pycache__/
 .venv*/

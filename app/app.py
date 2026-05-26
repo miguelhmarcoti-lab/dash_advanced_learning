@@ -1,82 +1,71 @@
 """
 =============================================================
-  War Conflict Prediction Dashboard — app.py
+  War Conflict Prediction Dashboard — app.py  (v2)
 =============================================================
 Flask app com 4 páginas:
-  /map        → Mapa-múndi com probabilidades
-  /table      → Tabela de países com bandeiras
-  /model      → Arquitetura e resultados da Rede Neural
-  /evaluation → Comparação de todos os modelos
+  /map        → Mapa-múndi com seletor de variante de modelo
+  /table      → Tabela de países com seletor de variante
+  /model      → Arquitetura, SHAP e resultados por variante
+  /evaluation → Comparação de todos os modelos por variante
 
 Como rodar:
-  cd app
-  pip install -r ../requirements.txt
-  python app.py
-
-Garanta que model/model.py foi executado antes:
-  cd ../model && python model.py
+  cd app && python app.py
+  (garanta que model/model.py foi executado antes)
 """
 
-import os
-import json
-import sys
-
-import numpy as np
-import pandas as pd
+import os, json
 from flask import Flask, render_template, jsonify
 
-# ── Paths ─────────────────────────────────────────────────────────────────────
 APP_DIR   = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR  = os.path.dirname(APP_DIR)
 MODEL_DIR = os.path.join(ROOT_DIR, "model")
-DATA_DIR  = os.path.join(ROOT_DIR, "data")
 
 app = Flask(__name__)
 
+VARIANT_LABELS = {
+    "base":          "Modelo Base",
+    "sem_lag1":      "Sem Conflito Anterior",
+    "sem_historico": "Conflitos Novos",
+}
 
 # ══════════════════════════════════════════════════════════════════════════════
-# HELPERS — Carregar artefatos do modelo
+# HELPERS
 # ══════════════════════════════════════════════════════════════════════════════
 
-def load_json(filename: str, default=None):
+def load_json(filename, default=None):
     path = os.path.join(MODEL_DIR, filename)
     if not os.path.exists(path):
-        return default
-    with open(path) as f:
+        return default if default is not None else {}
+    with open(path, encoding="utf-8") as f:
         return json.load(f)
 
+def get_predictions_all():
+    return load_json("predictions_all.json", {"variants": {}, "prediction_year": None})
 
-def get_predictions() -> dict:
-    return load_json("predictions.json", {})
-
-
-def get_all_results() -> dict:
+def get_all_results():
     return load_json("all_results.json", {})
 
-
-def get_baseline_results() -> dict:
-    return load_json("baseline_results.json", {})
-
-
-def get_nn_results() -> dict:
-    return load_json("nn_results.json", {})
-
-
-def get_model_config() -> dict:
+def get_model_config():
     return load_json("model_config.json", {})
 
+def get_shap_importances():
+    return load_json("shap_importances.json", {})
 
-def get_nn_info() -> dict:
-    results = get_nn_results() or {}
-    if "Neural Network" in results:
-        return results["Neural Network"]
-    for value in results.values():
-        if isinstance(value, dict) and value.get("type") == "neural_network":
-            return value
-    return {}
+def get_prediction_year():
+    return get_predictions_all().get("prediction_year")
 
+def normalize_all_results(raw):
+    """Garante formato {variant: {model: metrics}}.
+    Se for legado {model: metrics}, envolve em {"base": ...}."""
+    if not raw:
+        return {}
+    first_val = next(iter(raw.values()), {})
+    if isinstance(first_val, dict):
+        inner = next(iter(first_val.values()), None)
+        if isinstance(inner, dict) and "auc_roc" in inner:
+            return raw
+    return {"base": raw}
 
-# ISO3 → nome completo do país
 ISO3_NAMES = {
     "AFG":"Afghanistan","AGO":"Angola","ALB":"Albania","ARG":"Argentina",
     "AUS":"Australia","AZE":"Azerbaijan","BDI":"Burundi","BEN":"Benin",
@@ -109,10 +98,8 @@ ISO3_NAMES = {
     "TUR":"Turkey","TWN":"Taiwan","TZA":"Tanzania","UGA":"Uganda",
     "UKR":"Ukraine","URY":"Uruguay","USA":"United States","UZB":"Uzbekistan",
     "VEN":"Venezuela","VNM":"Vietnam","YEM":"Yemen","ZAF":"South Africa",
-    "ZWE":"Zimbabwe","ALG":"Algeria","BGD":"Bangladesh",
+    "ZWE":"Zimbabwe",
 }
-
-# ISO3 → ISO2 para bandeiras emoji
 ISO3_TO_ISO2 = {
     "AFG":"AF","AGO":"AO","ALB":"AL","ARG":"AR","AUS":"AU","AZE":"AZ",
     "BDI":"BI","BEN":"BJ","BFA":"BF","BGD":"BD","BIH":"BA","BOL":"BO",
@@ -136,38 +123,40 @@ ISO3_TO_ISO2 = {
     "UZB":"UZ","VEN":"VE","VNM":"VN","YEM":"YE","ZAF":"ZA","ZWE":"ZW",
 }
 
-
-def iso2_to_flag(iso2: str) -> str:
-    """Converte ISO2 em emoji de bandeira."""
+def iso2_to_flag(iso2):
     if not iso2 or len(iso2) != 2:
         return "🏳"
     return "".join(chr(ord(c) + 127397) for c in iso2.upper())
 
-
-def build_countries_list() -> list:
-    """Monta lista de países com nome, bandeira e probabilidade."""
-    predictions = get_predictions()
+def build_countries_for_predictions(predictions):
     countries = []
     for iso3, prob in predictions.items():
-        iso2  = ISO3_TO_ISO2.get(iso3, "")
-        flag  = iso2_to_flag(iso2)
-        name  = ISO3_NAMES.get(iso3, iso3)
-        pct   = round(prob * 100, 1)
+        iso2 = ISO3_TO_ISO2.get(iso3, "")
         countries.append({
-            "iso3" : iso3,
-            "iso2" : iso2,
-            "flag" : flag,
-            "name" : name,
-            "prob" : prob,
-            "pct"  : pct,
+            "iso3": iso3, "iso2": iso2,
+            "flag": iso2_to_flag(iso2),
+            "name": ISO3_NAMES.get(iso3, iso3),
+            "prob": round(float(prob), 4),
+            "pct":  round(float(prob) * 100, 1),
         })
     countries.sort(key=lambda x: x["prob"], reverse=True)
     return countries
 
+def get_all_variants_countries():
+    preds_all = get_predictions_all()
+    result = {}
+    for vkey, preds in preds_all.get("variants", {}).items():
+        result[vkey] = build_countries_for_predictions(preds)
+    if not result:
+        old = load_json("predictions.json", {})
+        result["base"] = build_countries_for_predictions(old)
+    return result
 
-def model_is_trained() -> bool:
-    return os.path.exists(os.path.join(MODEL_DIR, "predictions.json"))
-
+def model_is_trained():
+    return (
+        os.path.exists(os.path.join(MODEL_DIR, "predictions_all.json")) or
+        os.path.exists(os.path.join(MODEL_DIR, "predictions.json"))
+    )
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ROTAS
@@ -177,119 +166,131 @@ def model_is_trained() -> bool:
 def index():
     return map_page()
 
-
 @app.route("/map")
 def map_page():
-    predictions = get_predictions()
-    countries   = build_countries_list()
-    trained     = model_is_trained()
+    trained         = model_is_trained()
+    all_vc          = get_all_variants_countries()
+    prediction_year = get_prediction_year()
 
-    # Preparar dados para Plotly Choropleth
-    map_data = [
-        {
-            "iso3" : c["iso3"],
-            "name" : c["name"],
-            "prob" : c["prob"],
-            "pct"  : c["pct"],
-        }
-        for c in countries
-    ]
-    return render_template(
-        "map.html",
-        map_data_json=json.dumps(map_data),
-        trained=trained,
-        active="map",
+    all_variants_map = {
+        vkey: [{"iso3": c["iso3"], "name": c["name"],
+                "prob": c["prob"],  "pct":  c["pct"]}
+               for c in countries]
+        for vkey, countries in all_vc.items()
+    }
+    return render_template("map.html",
+        all_variants_map_json = json.dumps(all_variants_map),
+        variant_labels_json   = json.dumps(VARIANT_LABELS),
+        prediction_year       = prediction_year,
+        trained=trained, active="map",
     )
-
 
 @app.route("/table")
 def table_page():
-    countries = build_countries_list()
-    trained   = model_is_trained()
-    return render_template(
-        "table.html",
-        countries=countries,
-        trained=trained,
-        active="table",
-    )
+    trained         = model_is_trained()
+    all_vc          = get_all_variants_countries()
+    prediction_year = get_prediction_year()
 
+    return render_template("table.html",
+        all_variants_countries_json = json.dumps(all_vc),
+        variant_labels_json         = json.dumps(VARIANT_LABELS),
+        prediction_year             = prediction_year,
+        trained=trained, active="table",
+        countries=all_vc.get("base", []),  # para server-side summary cards
+    )
 
 @app.route("/model")
 def model_page():
-    config     = get_model_config()
-    trained    = model_is_trained()
+    trained         = model_is_trained()
+    all_configs     = get_model_config()
+    shap_data       = get_shap_importances()
+    prediction_year = get_prediction_year()
+    all_results     = normalize_all_results(get_all_results())
 
-    nn_info = get_nn_info()
-    history = nn_info.get("history", {})
+    all_nn_info = {
+        vkey: vresults.get("NeuralNetwork", {})
+        for vkey, vresults in all_results.items()
+    }
+    base_config  = all_configs.get("base", all_configs) if all_configs else {}
+    base_nn_info = all_nn_info.get("base", {})
 
-    return render_template(
-        "model.html",
-        config=config,
-        nn_info=nn_info,
-        history_json=json.dumps(history),
-        trained=trained,
-        active="model",
+    return render_template("model.html",
+        all_configs_json    = json.dumps(all_configs),
+        all_nn_info_json    = json.dumps(all_nn_info),
+        shap_data_json      = json.dumps(shap_data),
+        variant_labels_json = json.dumps(VARIANT_LABELS),
+        prediction_year     = prediction_year,
+        trained=trained, active="model",
+        config=base_config, nn_info=base_nn_info,
+        history_json=json.dumps(base_nn_info.get("history", {})),
     )
-
 
 @app.route("/evaluation")
 def evaluation_page():
-    all_results = get_all_results()
-    trained     = model_is_trained()
+    trained         = model_is_trained()
+    prediction_year = get_prediction_year()
+    all_results     = normalize_all_results(get_all_results())
 
-    # Separar baseline vs rede neural
-    baseline = {k: v for k, v in all_results.items() if v.get("type") == "baseline"}
-    nn       = {k: v for k, v in all_results.items() if v.get("type") == "neural_network"}
-
-    # Todos os modelos para o radar/bar chart
+    MODEL_DISPLAY = {
+        "LogisticRegression":         "Logistic Regression",
+        "DecisionTreeClassifier":     "Decision Tree",
+        "RandomForestClassifier":     "Random Forest",
+        "GradientBoostingClassifier": "Gradient Boosting",
+        "NeuralNetwork":              "Neural Network",
+        "Logistic Regression":        "Logistic Regression",
+        "Decision Tree":              "Decision Tree",
+        "Random Forest":              "Random Forest",
+        "Gradient Boosting":          "Gradient Boosting",
+        "Neural Network":             "Neural Network",
+    }
     metrics = ["accuracy", "precision", "recall", "f1", "auc_roc"]
-    chart_data = []
-    for name, m in all_results.items():
-        chart_data.append({
-            "name"      : name,
-            "type"      : m.get("type", "baseline"),
-            "accuracy"  : m.get("accuracy", 0),
-            "precision" : m.get("precision", 0),
-            "recall"    : m.get("recall", 0),
-            "f1"        : m.get("f1", 0),
-            "auc_roc"   : m.get("auc_roc", 0),
-        })
-    # Ordenar por AUC-ROC
-    chart_data.sort(key=lambda x: x["auc_roc"], reverse=True)
 
-    return render_template(
-        "evaluation.html",
-        all_results=all_results,
-        baseline=baseline,
-        nn=nn,
-        chart_data_json=json.dumps(chart_data),
+    chart_data_by_variant = {}
+    for vkey, vresults in all_results.items():
+        rows = []
+        for name, m in vresults.items():
+            rows.append({
+                "name":   MODEL_DISPLAY.get(name, name),
+                "type":   m.get("type", "classical"),
+                "split":  m.get("split", "temporal (treino ≤ 2010 / teste > 2010)"),
+                **{k: round(float(m.get(k, 0)), 4) for k in metrics},
+            })
+        chart_data_by_variant[vkey] = sorted(rows, key=lambda x: x["auc_roc"], reverse=True)
+
+    base_results = all_results.get("base", {})
+
+    return render_template("evaluation.html",
+        all_results_json           = json.dumps(all_results),
+        chart_data_by_variant_json = json.dumps(chart_data_by_variant),
+        variant_labels_json        = json.dumps(VARIANT_LABELS),
+        prediction_year            = prediction_year,
+        trained=trained, active="evaluation",
+        all_results=base_results,
+        chart_data_json=json.dumps(chart_data_by_variant.get("base", [])),
         metrics=metrics,
-        trained=trained,
-        active="evaluation",
     )
 
-
-# ── API endpoints ─────────────────────────────────────────────────────────────
-
+# ── API ───────────────────────────────────────────────────────────────────────
 @app.route("/api/predictions")
 def api_predictions():
-    return jsonify(get_predictions())
-
+    return jsonify(get_predictions_all())
 
 @app.route("/api/results")
 def api_results():
-    return jsonify(get_all_results())
-
+    return jsonify(normalize_all_results(get_all_results()))
 
 @app.route("/api/config")
 def api_config():
     return jsonify(get_model_config())
 
+@app.route("/api/shap")
+def api_shap():
+    return jsonify(get_shap_importances())
 
 # ══════════════════════════════════════════════════════════════════════════════
 if __name__ == "__main__":
     if not model_is_trained():
-        print("\n⚠️  AVISO: model/predictions.json não encontrado.")
-        print("   Execute primeiro: cd ../model && python model.py\n")
+        print("\n⚠️  AVISO: modelo não treinado.")
+        print("   Execute: cd ../model && python model.py\n")
     port = int(os.environ.get("PORT", 5050))
     app.run(debug=False, host="0.0.0.0", port=port)

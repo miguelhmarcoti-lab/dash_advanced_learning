@@ -1,39 +1,191 @@
 {
-    "layers": [
-        {
-            "units": 128,
-            "activation": "relu",
-            "dropout": 0.3
-        },
-        {
-            "units": 2,
-            "activation": "relu",
-            "dropout": null
-        }
-    ],
-    "output_activation": "sigmoid",
-    "optimizer": "adam",
-    "loss": "binary_crossentropy",
-    "epochs": 100,
-    "batch_size": 32,
-    "validation_split": 0.2,
-    "early_stopping_patience": 10,
-    "reduce_lr_patience": 5,
-    "reduce_lr_factor": 0.2,
-    "min_lr": 1e-05,
-    "cutoff_year": 2010,
-    "feature_names": [
-        "conflict",
-        "democracy_polity",
-        "gdp_per_capita",
-        "military_exp_pct_gdp",
-        "trade_pct_gdp",
-        "is_democracy",
-        "conflict_lag1",
-        "conflict_5y_sum"
-    ],
-    "input_dim": 8,
-    "training_samples": 6120,
-    "test_samples": 1080,
-    "framework": "TensorFlow/Keras"
+    "base": {
+        "label": "Modelo Base",
+        "description": "Reproduz o modelo original: clássicos sem 'conflict' atual (usa log_gdp + lag1 + 5y_sum); NN mantém 'conflict' (preditor forte, maior recall).",
+        "classical_drop": [
+            "iso3",
+            "year",
+            "gdp_per_capita",
+            "conflict"
+        ],
+        "nn_drop": [
+            "iso3",
+            "year",
+            "gdp_per_capita",
+            "conflict"
+        ],
+        "features_classical": [
+            "democracy_polity",
+            "military_exp_pct_gdp",
+            "trade_pct_gdp",
+            "log_gdp_per_capita",
+            "is_democracy",
+            "conflict_lag1",
+            "conflict_5y_sum"
+        ],
+        "features_nn": [
+            "democracy_polity",
+            "military_exp_pct_gdp",
+            "trade_pct_gdp",
+            "log_gdp_per_capita",
+            "is_democracy",
+            "conflict_lag1",
+            "conflict_5y_sum"
+        ],
+        "features": [
+            "democracy_polity",
+            "military_exp_pct_gdp",
+            "trade_pct_gdp",
+            "log_gdp_per_capita",
+            "is_democracy",
+            "conflict_lag1",
+            "conflict_5y_sum"
+        ],
+        "feature_names": [
+            "democracy_polity",
+            "military_exp_pct_gdp",
+            "trade_pct_gdp",
+            "log_gdp_per_capita",
+            "is_democracy",
+            "conflict_lag1",
+            "conflict_5y_sum"
+        ],
+        "input_dim": 7,
+        "nn_architecture": [
+            {
+                "units": 128,
+                "activation": "relu",
+                "dropout": 0.3
+            },
+            {
+                "units": 2,
+                "activation": "relu",
+                "dropout": null
+            }
+        ]
+    },
+    "sem_lag1": {
+        "label": "Sem Conflito Anterior",
+        "description": "Remove conflict_lag1 e conflict atual; mantém conflict_5y_sum. Reduz viés de 'guerra já em curso'.",
+        "classical_drop": [
+            "iso3",
+            "year",
+            "gdp_per_capita",
+            "conflict",
+            "conflict_lag1"
+        ],
+        "nn_drop": [
+            "iso3",
+            "year",
+            "gdp_per_capita",
+            "conflict",
+            "conflict_lag1"
+        ],
+        "features_classical": [
+            "democracy_polity",
+            "military_exp_pct_gdp",
+            "trade_pct_gdp",
+            "log_gdp_per_capita",
+            "is_democracy",
+            "conflict_5y_sum"
+        ],
+        "features_nn": [
+            "democracy_polity",
+            "military_exp_pct_gdp",
+            "trade_pct_gdp",
+            "log_gdp_per_capita",
+            "is_democracy",
+            "conflict_5y_sum"
+        ],
+        "features": [
+            "democracy_polity",
+            "military_exp_pct_gdp",
+            "trade_pct_gdp",
+            "log_gdp_per_capita",
+            "is_democracy",
+            "conflict_5y_sum"
+        ],
+        "feature_names": [
+            "democracy_polity",
+            "military_exp_pct_gdp",
+            "trade_pct_gdp",
+            "log_gdp_per_capita",
+            "is_democracy",
+            "conflict_5y_sum"
+        ],
+        "input_dim": 6,
+        "nn_architecture": [
+            {
+                "units": 128,
+                "activation": "relu",
+                "dropout": 0.3
+            },
+            {
+                "units": 2,
+                "activation": "relu",
+                "dropout": null
+            }
+        ]
+    },
+    "sem_historico": {
+        "label": "Conflitos Novos",
+        "description": "Remove todo o histórico de conflito (lag1 + 5y_sum + conflict). Prevê apenas via fatores estruturais: economia, democracia, gastos militares.",
+        "classical_drop": [
+            "iso3",
+            "year",
+            "gdp_per_capita",
+            "conflict",
+            "conflict_lag1",
+            "conflict_5y_sum"
+        ],
+        "nn_drop": [
+            "iso3",
+            "year",
+            "gdp_per_capita",
+            "conflict",
+            "conflict_lag1",
+            "conflict_5y_sum"
+        ],
+        "features_classical": [
+            "democracy_polity",
+            "military_exp_pct_gdp",
+            "trade_pct_gdp",
+            "log_gdp_per_capita",
+            "is_democracy"
+        ],
+        "features_nn": [
+            "democracy_polity",
+            "military_exp_pct_gdp",
+            "trade_pct_gdp",
+            "log_gdp_per_capita",
+            "is_democracy"
+        ],
+        "features": [
+            "democracy_polity",
+            "military_exp_pct_gdp",
+            "trade_pct_gdp",
+            "log_gdp_per_capita",
+            "is_democracy"
+        ],
+        "feature_names": [
+            "democracy_polity",
+            "military_exp_pct_gdp",
+            "trade_pct_gdp",
+            "log_gdp_per_capita",
+            "is_democracy"
+        ],
+        "input_dim": 5,
+        "nn_architecture": [
+            {
+                "units": 128,
+                "activation": "relu",
+                "dropout": 0.3
+            },
+            {
+                "units": 2,
+                "activation": "relu",
+                "dropout": null
+            }
+        ]
+    }
 }
